@@ -1,8 +1,10 @@
-﻿using System.Text;
+﻿using Deliverance.Core.Storage;
+using System.Text;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Deliverance.Core.Storage;
 
-public sealed class FileSaveStore : ISaveStore
+public sealed class FileSaveStore : ISaveStore, IStreamingSaveStore
 {
     private readonly string _rootDir;
     private readonly string _extension;
@@ -16,6 +18,38 @@ public sealed class FileSaveStore : ISaveStore
 
     public Task<bool> ExistsAsync(string slotId, CancellationToken ct = default)
         => Task.FromResult(File.Exists(PathFor(slotId)));
+
+    public Task<SlotInfo?> GetSlotInfoAsync(string slotId, CancellationToken ct = default)
+    {
+        var path = PathFor(slotId);
+        if (!File.Exists(path)) return Task.FromResult<SlotInfo?>(null);
+        var fi = new FileInfo(path);
+        var info = new SlotInfo(
+            SlotId: slotId,
+            LastModifiedUtc: fi.LastWriteTimeUtc == default ? null : new DateTimeOffset(fi.LastWriteTimeUtc, TimeSpan.Zero),
+            SizeBytes: fi.Length
+        );
+        return Task.FromResult<SlotInfo?>(info);
+    }
+
+    public Task<IReadOnlyList<SlotInfo>> ListSlotInfosAsync(CancellationToken ct = default)
+    {
+        Directory.CreateDirectory(_rootDir);
+        var files = Directory.GetFiles(_rootDir, "*" + _extension, SearchOption.TopDirectoryOnly);
+        var infos = files.Select(f =>
+        {
+            var fi = new FileInfo(f);
+            var slot = Path.GetFileNameWithoutExtension(f);
+            return new SlotInfo(
+                SlotId: slot,
+                LastModifiedUtc: fi.LastWriteTimeUtc == default ? null : new DateTimeOffset(fi.LastWriteTimeUtc, TimeSpan.Zero),
+                SizeBytes: fi.Length
+            );
+        }).ToArray();
+
+        return Task.FromResult<IReadOnlyList<SlotInfo>>(infos);
+    }
+
 
     public Task<IReadOnlyList<string>> ListSlotsAsync(CancellationToken ct = default)
     {
@@ -66,6 +100,20 @@ public sealed class FileSaveStore : ISaveStore
         {
             File.Move(tmp, path, overwrite: true);
         }
+    }
+
+        public Task<Stream> OpenReadAsync(string slotId, CancellationToken ct = default)
+    {
+        var path = PathFor(slotId);
+        Stream s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024, useAsync: true);
+        return Task.FromResult(s);
+    }
+
+    public async Task WriteAsync(string slotId, Stream data, int keepBackups, CancellationToken ct = default)
+    {
+        using var ms = new MemoryStream();
+        await data.CopyToAsync(ms, 128 * 1024, ct).ConfigureAwait(false);
+        await WriteSlotAsync(slotId, ms.ToArray(), keepBackups, ct).ConfigureAwait(false);
     }
 
     public Task DeleteAsync(string slotId, CancellationToken ct = default)

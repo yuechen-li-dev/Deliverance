@@ -30,8 +30,10 @@ public static class DeliveranceStrideExtensions
         var deliverance = new DeliveranceService(options);
 
         // Register under both concrete + interface for convenience
-        services.AddService(typeof(IDeliverance), deliverance);
-        services.AddService(typeof(DeliveranceService), deliverance);
+        /*services.AddService(typeof(IDeliverance), deliverance);
+        services.AddService(typeof(DeliveranceService), deliverance);*/
+
+        services.AddService(deliverance);
 
         return deliverance;
     }

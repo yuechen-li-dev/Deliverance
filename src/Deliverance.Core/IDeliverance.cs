@@ -1,5 +1,6 @@
 ﻿using Deliverance.Core.Modules;
 using Deliverance.Core.BuiltIns;
+using Deliverance.Core.Storage;
 
 namespace Deliverance.Core;
 
@@ -17,6 +18,8 @@ public interface IDeliverance
     Task LoadSlotAsync(string slotId, CancellationToken ct = default);
 
     Task<IReadOnlyList<string>> ListSlotsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<SlotInfo>> ListSlotInfosAsync(CancellationToken ct = default);
+    Task<SlotInfo?> GetSlotInfoAsync(string slotId, CancellationToken ct = default);
     Task<bool> SlotExistsAsync(string slotId, CancellationToken ct = default);
     Task DeleteSlotAsync(string slotId, CancellationToken ct = default);
 }

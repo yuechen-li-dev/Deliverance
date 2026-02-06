@@ -3,6 +3,7 @@ using Deliverance.Core.Codecs;
 using Deliverance.Core.Format;
 using Deliverance.Core.IO;
 using Deliverance.Core.Modules;
+using Deliverance.Core.Storage;
 
 namespace Deliverance.Core;
 
@@ -49,6 +50,12 @@ public sealed class DeliveranceService : IDeliverance
 
     public Task<IReadOnlyList<string>> ListSlotsAsync(CancellationToken ct = default)
         => Options.Store.ListSlotsAsync(ct);
+
+    public Task<IReadOnlyList<SlotInfo>> ListSlotInfosAsync(CancellationToken ct = default)
+    => Options.Store.ListSlotInfosAsync(ct);
+
+    public Task<SlotInfo?> GetSlotInfoAsync(string slotId, CancellationToken ct = default)
+        => Options.Store.GetSlotInfoAsync(slotId, ct);
 
     public Task<bool> SlotExistsAsync(string slotId, CancellationToken ct = default)
         => Options.Store.ExistsAsync(slotId, ct);
@@ -126,13 +133,33 @@ public sealed class DeliveranceService : IDeliverance
 
         var finalBytes = SaveContainerWriter.Write(header, directory, payloads);
 
-        await Options.Store.WriteSlotAsync(slotId, finalBytes, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
+        if (Options.Store is IStreamingSaveStore streaming)
+        {
+            using var ms = new MemoryStream(finalBytes, writable: false);
+            await streaming.WriteAsync(slotId, ms, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            await Options.Store.WriteSlotAsync(slotId, finalBytes, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
+        }
+
         Diagnostics.EmitInfo($"Saved slot '{slotId}' with {directory.Count} chunks.");
     }
 
     public async Task LoadSlotAsync(string slotId, CancellationToken ct = default)
     {
-        var bytes = await Options.Store.ReadSlotAsync(slotId, ct).ConfigureAwait(false);
+        ReadOnlyMemory<byte> bytes;
+        if (Options.Store is IStreamingSaveStore streaming)
+        {
+            await using var s = await streaming.OpenReadAsync(slotId, ct).ConfigureAwait(false);
+            using var ms = new MemoryStream();
+            await s.CopyToAsync(ms, 128 * 1024, ct).ConfigureAwait(false);
+            bytes = ms.ToArray();
+        }
+        else
+        {
+            bytes = await Options.Store.ReadSlotAsync(slotId, ct).ConfigureAwait(false);
+        }
         var container = SaveContainerReader.Read(bytes);
 
         // Map chunks
