@@ -9,7 +9,7 @@ public sealed class FileSaveStore : ISaveStore, IStreamingSaveStore
     private readonly string _rootDir;
     private readonly string _extension;
 
-    public FileSaveStore(string rootDir, string extension = ".dlv")
+    public FileSaveStore(string rootDir, string extension = ".dlv_b")
     {
         _rootDir = rootDir;
         _extension = extension.StartsWith('.') ? extension : "." + extension;
