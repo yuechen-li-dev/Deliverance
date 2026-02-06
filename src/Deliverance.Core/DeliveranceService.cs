@@ -117,29 +117,41 @@ public sealed class DeliveranceService : IDeliverance
             BuildId: Options.BuildId
         );
 
-        // Build placeholder directory to measure size
-        var placeholderDir = new List<ChunkEntry>(keys.Length);
-        for (int i = 0; i < keys.Length; i++)
-            placeholderDir.Add(new ChunkEntry(keys[i], moduleVersions[i], codecIds[i], Offset: 0, Length: payloads[i].Length));
-
-        // Measure prefix size by writing container with empty payloads (payloads not appended)
-        // We'll approximate by writing a container and subtracting payloads; simple and safe for MVP.
-        var prefixBytes = SaveContainerWriter.WritePrefixOnly(header, directory);
-        long prefixLen = prefixBytes.LongLength;
-
-        long offset = prefixLen;
+        // Build an initial directory with offsets = 0 just to measure prefix length.
+        // (Lengths must be correct; offsets are fixed-size fields so they don't affect prefix size.)
         directory.Clear();
         for (int i = 0; i < keys.Length; i++)
         {
-            directory.Add(new ChunkEntry(keys[i], moduleVersions[i], codecIds[i], offset, payloads[i].Length));
-            offset += payloads[i].Length;
+            directory.Add(new ChunkEntry(
+                Key: keys[i],
+                ModuleVersion: moduleVersions[i],
+                CodecId: codecIds[i],
+                Offset: 0,
+                Length: payloads[i].Length
+            ));
         }
+
+        // Measure prefix length
+        var measurePrefix = SaveContainerWriter.WritePrefixOnly(header, directory);
+        long prefixLen = measurePrefix.LongLength;
+
+        // Now patch offsets in-place (or rebuild entries) using the measured prefix length.
+        long offset = prefixLen;
+        for (int i = 0; i < directory.Count; i++)
+        {
+            var e = directory[i];
+            directory[i] = e with { Offset = offset };
+            offset += e.Length;
+        }
+
+        // IMPORTANT: write the real prefix with correct offsets
+        var writePrefix = SaveContainerWriter.WritePrefixOnly(header, directory);
 
         if (Options.Store is IStreamingSaveStore streaming)
         {
-            // Stream prefix + each payload sequentially (no large final container allocation)
             var segments = new ReadOnlyMemory<byte>[1 + payloads.Count];
-            segments[0] = prefixBytes;
+            segments[0] = writePrefix;
+
             for (int i = 0; i < payloads.Count; i++)
                 segments[i + 1] = payloads[i];
 
@@ -148,12 +160,10 @@ public sealed class DeliveranceService : IDeliverance
         }
         else
         {
-            // Non-streaming fallback: allocate one array (previous behavior)
+            // Non-streaming fallback: still allocates a single array
             var finalBytes = SaveContainerWriter.Write(header, directory, payloads);
             await Options.Store.WriteSlotAsync(slotId, finalBytes, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
         }
-
-        Diagnostics.EmitInfo($"Saved slot '{slotId}' with {directory.Count} chunks.");
     }
 
     public async Task LoadSlotAsync(string slotId, CancellationToken ct = default)
