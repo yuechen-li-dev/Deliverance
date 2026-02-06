@@ -23,4 +23,18 @@ public sealed class MessagePackSaveSerializer : ISaveSerializer
 
     public T Deserialize<T>(ReadOnlyMemory<byte> bytes)
         => MessagePackSerializer.Deserialize<T>(bytes, Options);
+
+    public byte[] Serialize(object value, Type type)
+    {
+        if (type is null) throw new ArgumentNullException(nameof(type));
+        return MessagePackSerializer.Serialize(type, value, Options);
+    }
+
+    public object Deserialize(Type type, ReadOnlyMemory<byte> bytes)
+    {
+        if (type is null) throw new ArgumentNullException(nameof(type));
+        return MessagePackSerializer.Deserialize(type, bytes, Options)
+            ?? throw new InvalidDataException($"Deserializer returned null for type '{type}'.");
+    }
+
 }

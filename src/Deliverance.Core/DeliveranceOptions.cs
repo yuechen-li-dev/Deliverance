@@ -30,6 +30,8 @@ public sealed class DeliveranceOptions
 
     /// <summary>Optional extra backup copies to keep when saving.</summary>
     public int BackupCopiesToKeep { get; set; } = 2;
+
+    public VersionMismatchPolicy VersionMismatchPolicy { get; set; } = VersionMismatchPolicy.Error;
 }
 
 public enum MissingChunkPolicy
@@ -37,4 +39,11 @@ public enum MissingChunkPolicy
     Ignore = 0,
     Warn = 1,
     Error = 2,
+}
+
+public enum VersionMismatchPolicy
+{
+    Ignore = 0,   // Skip restoring that module
+    Warn = 1,     // Warn and skip
+    Error = 2,    // Throw
 }

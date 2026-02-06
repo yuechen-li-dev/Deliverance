@@ -200,24 +200,50 @@ public sealed class DeliveranceService : IDeliverance
                 continue;
             }
 
-            try
+            var payload = container.GetPayload(entry);
+
+            var codec = ResolveCodec(entry.CodecId);
+            var rawBytes = codec.Decompress(payload);
+            ReadOnlyMemory<byte> raw = rawBytes;
+
+            // Fast path: versions match
+            if (entry.ModuleVersion == module.Version)
             {
-                var payload = container.GetPayload(entry);
-
-                var codec = ResolveCodec(entry.CodecId);
-                var rawBytes = codec.Decompress(payload);
-                ReadOnlyMemory<byte> raw = rawBytes;
-
                 var r = new SaveReader(Options.Serializer, raw);
                 module.Restore(r);
+                continue;
             }
-            catch (Exception ex)
-            {
-                Diagnostics.EmitError($"Load failed in module '{key}'.", ex);
-                throw;
-            }
-        }
 
+            // Version mismatch: attempt DTO migration if supported
+            if (module is Deliverance.Core.Modules.IDtoMigratableSaveModule migratable)
+            {
+                var dtoType = migratable.GetDtoType(entry.ModuleVersion);
+                object dto = Options.Serializer.Deserialize(dtoType, raw);
+
+                int v = entry.ModuleVersion;
+                while (v < module.Version)
+                {
+                    dto = migratable.UpgradeDto(dto, v);
+                    v++;
+                }
+
+                if (module is Deliverance.Core.Modules.IDtoRestorableSaveModule restorable)
+                {
+                    restorable.RestoreFromDto(dto);
+                }
+                else
+                {
+                    var finalBytes = Options.Serializer.Serialize(dto, dto.GetType());
+                    var r2 = new SaveReader(Options.Serializer, finalBytes);
+                    module.Restore(r2);
+                }
+
+                continue;
+            }
+
+            HandleVersionMismatch(slotId, key, entry.ModuleVersion, module.Version);
+            continue;
+        }
         Diagnostics.EmitInfo($"Loaded slot '{slotId}' (container v{container.Header.ContainerVersion}).");
     }
 
@@ -242,6 +268,24 @@ public sealed class DeliveranceService : IDeliverance
                 Diagnostics.EmitWarning(msg);
                 return;
             case MissingChunkPolicy.Error:
+                throw new InvalidDataException(msg);
+            default:
+                Diagnostics.EmitWarning(msg);
+                return;
+        }
+    }
+
+    private void HandleVersionMismatch(string slotId, string key, int fromVersion, int toVersion)
+    {
+        var msg = $"Slot '{slotId}' chunk '{key}' has version {fromVersion}, but module expects {toVersion}.";
+        switch (Options.VersionMismatchPolicy)
+        {
+            case VersionMismatchPolicy.Ignore:
+                return;
+            case VersionMismatchPolicy.Warn:
+                Diagnostics.EmitWarning(msg);
+                return;
+            case VersionMismatchPolicy.Error:
                 throw new InvalidDataException(msg);
             default:
                 Diagnostics.EmitWarning(msg);
