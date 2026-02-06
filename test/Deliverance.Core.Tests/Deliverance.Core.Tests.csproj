@@ -20,8 +20,16 @@
     <ProjectReference Include="..\..\src\Deliverance.Core\Deliverance.Core.csproj" />
   </ItemGroup>
 
+	<ItemGroup>
+		<None Include="TestData\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="TestData\" />
   </ItemGroup>
 
 </Project>
