@@ -1,5 +1,5 @@
 <Solution>
   <Project Path="src/Deliverance.Core/Deliverance.Core.csproj" />
   <Project Path="src/Deliverance.StrideConn/Deliverance.StrideConn.csproj" Id="617780d1-ddc5-472f-bb2c-7fc2e9960775" />
-  <Project Path="test/Deliverance.Core.Test/Deliverance.Core.Test.csproj" Id="679ab1de-ccf8-4b71-a575-c81478dba699" />
+  <Project Path="test/Deliverance.Core.Test/Deliverance.Core.Tests.csproj" Id="679ab1de-ccf8-4b71-a575-c81478dba699" />
 </Solution>
