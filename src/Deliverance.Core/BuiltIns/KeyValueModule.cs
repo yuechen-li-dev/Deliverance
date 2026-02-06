@@ -1,12 +1,11 @@
 ﻿using Deliverance.Core.IO;
 using Deliverance.Core.Modules;
 using Deliverance.Core.Serialization;
-using MessagePack;
 
 namespace Deliverance.Core.BuiltIns;
 
 /// <summary>
-/// MVP key/value chunk. Values are stored as raw serialized bytes.
+/// Key/value chunk. Values are stored as raw serialized bytes using the configured ISaveSerializer.
 /// Caller controls type at read time (explicit, no typeless magic).
 /// </summary>
 public sealed class KeyValueModule : ISaveModule
@@ -16,12 +15,12 @@ public sealed class KeyValueModule : ISaveModule
 
     private readonly ISaveSerializer _serializer;
 
-    // Store serialized payloads; per-key value schema belongs to the caller.
+    // Store per-key serialized payloads; per-key value schema belongs to the caller.
     private readonly Dictionary<string, byte[]> _data = new(StringComparer.Ordinal);
 
     public KeyValueModule(ISaveSerializer serializer)
     {
-        _serializer = serializer;
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     }
 
     public IReadOnlyCollection<string> Keys => _data.Keys;
@@ -36,6 +35,7 @@ public sealed class KeyValueModule : ISaveModule
             value = _serializer.Deserialize<T>(bytes);
             return true;
         }
+
         value = default!;
         return false;
     }
@@ -43,12 +43,21 @@ public sealed class KeyValueModule : ISaveModule
     public bool Remove(string key) => _data.Remove(key);
 
     public void Capture(ISaveWriter w)
-        => w.WriteBytes(MessagePackSerializer.Serialize(_data));
+    {
+        // Serialize the dictionary via the configured serializer, not MessagePack directly.
+        var chunk = new KeyValueChunkV1 { Data = new Dictionary<string, byte[]>(_data, StringComparer.Ordinal) };
+        w.Write(chunk);
+    }
 
     public void Restore(ISaveReader r)
     {
         _data.Clear();
-        var dict = MessagePackSerializer.Deserialize<Dictionary<string, byte[]>>(r.ReadBytes());
-        foreach (var (k, v) in dict) _data[k] = v;
+        var chunk = r.Read<KeyValueChunkV1>();
+
+        // Be defensive: null-safe and force ordinal comparer.
+        if (chunk?.Data is null) return;
+
+        foreach (var (k, v) in chunk.Data)
+            _data[k] = v;
     }
 }
