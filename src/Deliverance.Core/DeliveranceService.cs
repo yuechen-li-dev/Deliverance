@@ -292,4 +292,114 @@ public sealed class DeliveranceService : IDeliverance
                 return;
         }
     }
+
+
+    public async Task<SlotInspection> InspectSlotAsync(string slotId, CancellationToken ct = default)
+    {
+        var bytes = await Options.Store.ReadSlotAsync(slotId, ct).ConfigureAwait(false);
+        var container = SaveContainerReader.Read(bytes);
+
+        var chunks = container.Directory
+            .Select(e => new ChunkInfo(e.Key, e.ModuleVersion, e.CodecId, e.Offset, e.Length))
+            .OrderBy(c => c.Key, StringComparer.Ordinal)
+            .ToArray();
+
+        return new SlotInspection(container.Header, chunks);
+    }
+
+    public async Task<ReadOnlyMemory<byte>> ExportChunkAsync(string slotId, string chunkKey, CancellationToken ct = default)
+    {
+        var bytes = await Options.Store.ReadSlotAsync(slotId, ct).ConfigureAwait(false);
+        var container = SaveContainerReader.Read(bytes);
+
+        var entry = container.Directory.FirstOrDefault(e => string.Equals(e.Key, chunkKey, StringComparison.Ordinal));
+        if (string.IsNullOrEmpty(entry.Key))
+            throw new KeyNotFoundException($"Chunk '{chunkKey}' not found in slot '{slotId}'.");
+
+        var payload = container.GetPayload(entry);
+        var codec = ResolveCodec(entry.CodecId);
+        var raw = codec.Decompress(payload);
+        return raw;
+    }
+
+    public async Task ImportChunkAsync(
+    string slotId,
+    string chunkKey,
+    ReadOnlyMemory<byte> rawChunkPayload,
+    int moduleVersion,
+    byte codecId,
+    CancellationToken ct = default)
+    {
+        // Load existing
+        var bytes = await Options.Store.ReadSlotAsync(slotId, ct).ConfigureAwait(false);
+        var container = SaveContainerReader.Read(bytes);
+
+        // Compress payload according to codecId
+        var codec = ResolveCodec(codecId);
+        var compressed = codec.Compress(rawChunkPayload);
+
+        // Build a new directory + payload list
+        var entries = container.Directory.ToList();
+        var payloads = new List<ReadOnlyMemory<byte>>(entries.Count);
+
+        // Replace or add entry
+        var idx = entries.FindIndex(e => string.Equals(e.Key, chunkKey, StringComparison.Ordinal));
+        if (idx >= 0)
+            entries[idx] = entries[idx] with { ModuleVersion = moduleVersion, CodecId = codecId, Length = compressed.Length };
+        else
+            entries.Add(new ChunkEntry(chunkKey, moduleVersion, codecId, Offset: 0, Length: compressed.Length));
+
+        // Sort by key for determinism
+        entries = [.. entries.OrderBy(e => e.Key, StringComparer.Ordinal)];
+
+        // Prepare payloads in same order as entries
+        foreach (var e in entries)
+        {
+            if (string.Equals(e.Key, chunkKey, StringComparison.Ordinal))
+            {
+                payloads.Add(compressed);
+            }
+            else
+            {
+                var p = container.GetPayload(container.Directory.First(x => x.Key == e.Key));
+                payloads.Add(p); // NOTE: this is still *compressed* bytes already stored
+            }
+        }
+
+        // Measure prefix, compute offsets, write
+        var header = container.Header;
+
+        // offsets=0 for measure
+        var dir = entries.Select(e => e with { Offset = 0 }).ToList();
+        var measurePrefix = SaveContainerWriter.WritePrefixOnly(header, dir);
+        long prefixLen = measurePrefix.LongLength;
+
+        long off = prefixLen;
+        for (int i = 0; i < dir.Count; i++)
+        {
+            var d = dir[i];
+            dir[i] = d with { Offset = off };
+            off += d.Length;
+        }
+
+        var writePrefix = SaveContainerWriter.WritePrefixOnly(header, dir);
+
+        if (Options.Store is IStreamingSaveStore streaming)
+        {
+            var segments = new ReadOnlyMemory<byte>[1 + payloads.Count];
+            segments[0] = writePrefix;
+            for (int i = 0; i < payloads.Count; i++)
+                segments[i + 1] = payloads[i];
+
+            await using var segmented = new Deliverance.Core.IO.SegmentedReadStream(segments);
+            await streaming.WriteAsync(slotId, segmented, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            var finalBytes = SaveContainerWriter.Write(header, dir, payloads);
+            await Options.Store.WriteSlotAsync(slotId, finalBytes, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
+        }
+    }
+
+
 }
