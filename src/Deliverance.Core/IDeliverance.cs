@@ -1,0 +1,22 @@
+﻿using Deliverance.Core.Modules;
+using Deliverance.Core.BuiltIns;
+
+namespace Deliverance.Core;
+
+public interface IDeliverance
+{
+    DeliveranceOptions Options { get; }
+    SaveDiagnostics Diagnostics { get; }
+
+    KeyValueStore KV { get; }
+
+    void Register(ISaveModule module);
+    bool Unregister(string key);
+
+    Task SaveSlotAsync(string slotId, CancellationToken ct = default);
+    Task LoadSlotAsync(string slotId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> ListSlotsAsync(CancellationToken ct = default);
+    Task<bool> SlotExistsAsync(string slotId, CancellationToken ct = default);
+    Task DeleteSlotAsync(string slotId, CancellationToken ct = default);
+}

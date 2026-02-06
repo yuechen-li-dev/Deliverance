@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Stride.Core" Version="4.3.0.2507" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deliverance.Core\Deliverance.Core.csproj" />
+  </ItemGroup>
+
+</Project>
