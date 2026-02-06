@@ -89,8 +89,12 @@ public sealed class DeliveranceService : IDeliverance
 
                 var raw = (ReadOnlyMemory<byte>)w.GetPayloadOrEmpty();
 
-                // MVP: apply default compression uniformly (currently none)
+                // MVP: apply default compression uniformly
                 ICompressionCodec codec = Options.DefaultCompression;
+
+                // Ensure default codec is in registry (helps if user swapped DefaultCompression but forgot to register)
+                Options.Codecs.Register(codec);
+
                 var compressed = codec.Compress(raw);
 
                 payloads.Add(compressed);
@@ -184,12 +188,9 @@ public sealed class DeliveranceService : IDeliverance
             {
                 var payload = container.GetPayload(entry);
 
-                // MVP: use default codec to decompress by id 0 only.
-                // Future: registry of codecs by Id.
-                ReadOnlyMemory<byte> raw =
-                    entry.CodecId == 0
-                        ? payload
-                        : throw new NotSupportedException($"Codec id '{entry.CodecId}' not supported in MVP (only 0=none).");
+                var codec = ResolveCodec(entry.CodecId);
+                var rawBytes = codec.Decompress(payload);
+                ReadOnlyMemory<byte> raw = rawBytes;
 
                 var r = new SaveReader(Options.Serializer, raw);
                 module.Restore(r);
@@ -202,6 +203,16 @@ public sealed class DeliveranceService : IDeliverance
         }
 
         Diagnostics.EmitInfo($"Loaded slot '{slotId}' (container v{container.Header.ContainerVersion}).");
+    }
+
+    private ICompressionCodec ResolveCodec(byte codecId)
+    {
+        if (Options.Codecs.TryGet(codecId, out var codec))
+            return codec;
+
+        throw new NotSupportedException(
+            $"Codec id '{codecId}' is not registered. " +
+            $"Register the codec in DeliveranceOptions.Codecs to load this save.");
     }
 
     private void HandleMissingChunk(string slotId, string key)

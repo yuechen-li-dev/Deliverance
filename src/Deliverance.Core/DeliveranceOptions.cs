@@ -17,7 +17,15 @@ public sealed class DeliveranceOptions
     public required ISaveStore Store { get; init; }
     public required ISaveSerializer Serializer { get; init; }
 
-    /// <summary>MVP default is none. You can swap later per-chunk if you want.</summary>
+    /// <summary>
+    /// Registry used to resolve CodecId → codec instance when reading saves.
+    /// Must include codec 0 (none).
+    /// </summary>
+    public ICodecRegistry Codecs { get; set; } = new DefaultCodecRegistry();
+
+    /// <summary>
+    /// Default codec used when saving chunks (unless you later add per-module overrides).
+    /// </summary>
     public ICompressionCodec DefaultCompression { get; set; } = new NoCompressionCodec();
 
     /// <summary>Optional extra backup copies to keep when saving.</summary>
