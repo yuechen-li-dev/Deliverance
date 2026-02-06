@@ -28,6 +28,21 @@ internal static class SaveContainerWriter
 
         using var ms = new MemoryStream(capacity: 1024);
 
+        // prefix
+        var prefix = WritePrefixOnly(header, directory);
+        ms.Write(prefix);
+
+        // payloads
+        for (int i = 0; i < payloads.Count; i++)
+            ms.Write(payloads[i].Span);
+
+        return ms.ToArray();
+    }
+
+    public static byte[] WritePrefixOnly(SaveHeader header, IReadOnlyList<ChunkEntry> directory)
+    {
+        using var ms = new MemoryStream(capacity: 512);
+
         WriteBytes(ms, Magic);
         WriteInt32(ms, header.ContainerVersion);
         WriteInt64(ms, header.UtcUnixSeconds);
@@ -35,7 +50,6 @@ internal static class SaveContainerWriter
 
         WriteInt32(ms, directory.Count);
 
-        // Directory
         for (int i = 0; i < directory.Count; i++)
         {
             var e = directory[i];
@@ -44,13 +58,6 @@ internal static class SaveContainerWriter
             ms.WriteByte(e.CodecId);
             WriteInt64(ms, e.Offset);
             WriteInt32(ms, e.Length);
-        }
-
-        // Payloads
-        for (int i = 0; i < payloads.Count; i++)
-        {
-            var p = payloads[i];
-            ms.Write(p.Span);
         }
 
         return ms.ToArray();

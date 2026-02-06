@@ -120,8 +120,8 @@ public sealed class DeliveranceService : IDeliverance
 
         // Measure prefix size by writing container with empty payloads (payloads not appended)
         // We'll approximate by writing a container and subtracting payloads; simple and safe for MVP.
-        var tmpBytes = SaveContainerWriter.Write(header, placeholderDir, payloads: []);
-        long prefixLen = tmpBytes.LongLength;
+        var prefixBytes = SaveContainerWriter.WritePrefixOnly(header, placeholderDir);
+        long prefixLen = prefixBytes.LongLength;
 
         long offset = prefixLen;
         directory.Clear();
