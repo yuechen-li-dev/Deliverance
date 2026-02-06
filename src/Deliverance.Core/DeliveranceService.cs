@@ -124,7 +124,7 @@ public sealed class DeliveranceService : IDeliverance
 
         // Measure prefix size by writing container with empty payloads (payloads not appended)
         // We'll approximate by writing a container and subtracting payloads; simple and safe for MVP.
-        var prefixBytes = SaveContainerWriter.WritePrefixOnly(header, placeholderDir);
+        var prefixBytes = SaveContainerWriter.WritePrefixOnly(header, directory);
         long prefixLen = prefixBytes.LongLength;
 
         long offset = prefixLen;
@@ -135,15 +135,21 @@ public sealed class DeliveranceService : IDeliverance
             offset += payloads[i].Length;
         }
 
-        var finalBytes = SaveContainerWriter.Write(header, directory, payloads);
-
         if (Options.Store is IStreamingSaveStore streaming)
         {
-            using var ms = new MemoryStream(finalBytes, writable: false);
-            await streaming.WriteAsync(slotId, ms, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
+            // Stream prefix + each payload sequentially (no large final container allocation)
+            var segments = new ReadOnlyMemory<byte>[1 + payloads.Count];
+            segments[0] = prefixBytes;
+            for (int i = 0; i < payloads.Count; i++)
+                segments[i + 1] = payloads[i];
+
+            await using var segmented = new Deliverance.Core.IO.SegmentedReadStream(segments);
+            await streaming.WriteAsync(slotId, segmented, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
         }
         else
         {
+            // Non-streaming fallback: allocate one array (previous behavior)
+            var finalBytes = SaveContainerWriter.Write(header, directory, payloads);
             await Options.Store.WriteSlotAsync(slotId, finalBytes, Options.BackupCopiesToKeep, ct).ConfigureAwait(false);
         }
 
