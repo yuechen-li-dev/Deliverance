@@ -3,7 +3,16 @@
 public readonly record struct ChunkEntry(
     string Key,
     int ModuleVersion,
-    byte CodecId,
+    Modules.ModuleCriticality Criticality,
+
+    byte SerializerId,
+    byte CompressionId,
+    byte EncryptionId,
+    byte HashId,
+
     long Offset,
-    int Length
+    int Length,
+
+    byte[]? EncryptionMetadata,
+    byte[]? HashBytes
 );

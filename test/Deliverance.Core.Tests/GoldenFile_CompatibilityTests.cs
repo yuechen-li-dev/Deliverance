@@ -15,7 +15,7 @@ public sealed class GoldenFile_CompatibilityTests
         Assert.True(File.Exists(goldenPath), $"Missing golden file: {goldenPath}");
 
         // Use FileSaveStore pointing at TestData folder.
-        var store = new FileSaveStore(root);
+        var store = new FileSaveStore(root, ".dlv_b");
 
         var options = new DeliveranceOptions
         {

@@ -12,6 +12,17 @@ internal class InMemorySaveStore : ISaveStore
 
     private readonly Dictionary<string, Entry> _slots = new(StringComparer.Ordinal);
 
+    public byte[] GetBytes(string slotId) => _slots[slotId].Bytes.ToArray();
+
+    public void SetBytes(string slotId, byte[] bytes)
+    {
+        _slots[slotId] = new Entry
+        {
+            Bytes = bytes.ToArray(),
+            LastModifiedUtc = DateTimeOffset.UtcNow,
+        };
+    }
+
     public Task<bool> ExistsAsync(string slotId, CancellationToken ct = default)
         => Task.FromResult(_slots.ContainsKey(slotId));
 

@@ -1,94 +1,99 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Text;
 
 namespace Deliverance.Core.Format;
 
 internal static class SaveContainerWriter
 {
-    // Simple container:
-    // magic(4) = "DLVR"
-    // containerVersion(int32)
-    // utcUnixSeconds(int64)
-    // buildIdLen(int32) + utf8 bytes (or -1 for null)
-    // chunkCount(int32)
-    // directory entries:
-    //   keyLen(int32) + key utf8
-    //   moduleVersion(int32)
-    //   codecId(byte)
-    //   offset(int64)
-    //   length(int32)
-    // payload blobs concatenated
-
-    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("DLVR");
-
     public static byte[] Write(SaveHeader header, IReadOnlyList<ChunkEntry> directory, IReadOnlyList<ReadOnlyMemory<byte>> payloads)
     {
         if (directory.Count != payloads.Count)
-            throw new InvalidOperationException("Directory/payload count mismatch.");
+        {
+            throw new InvalidOperationException("Directory and payload counts differ.");
+        }
 
-        using var ms = new MemoryStream(capacity: 1024);
-
-        // prefix
-        var prefix = WritePrefixOnly(header, directory);
-        ms.Write(prefix);
-
-        // payloads
-        for (int i = 0; i < payloads.Count; i++)
-            ms.Write(payloads[i].Span);
-
-        return ms.ToArray();
+        using var stream = new MemoryStream();
+        stream.Write(WritePrefixOnly(header, directory));
+        foreach (ReadOnlyMemory<byte> payload in payloads)
+        {
+            stream.Write(payload.Span);
+        }
+        return stream.ToArray();
     }
 
     public static byte[] WritePrefixOnly(SaveHeader header, IReadOnlyList<ChunkEntry> directory)
     {
-        using var ms = new MemoryStream(capacity: 512);
-
-        WriteBytes(ms, Magic);
-        WriteInt32(ms, header.ContainerVersion);
-        WriteInt64(ms, header.UtcUnixSeconds);
-        WriteString(ms, header.BuildId);
-
-        WriteInt32(ms, directory.Count);
-
-        for (int i = 0; i < directory.Count; i++)
+        if (header.ContainerVersion != DeliveranceOptions.CurrentContainerFormatVersion)
         {
-            var e = directory[i];
-            WriteString(ms, e.Key);
-            WriteInt32(ms, e.ModuleVersion);
-            ms.WriteByte(e.CodecId);
-            WriteInt64(ms, e.Offset);
-            WriteInt32(ms, e.Length);
+            throw new DeliveranceException(
+                SaveDiagnosticCode.UnsupportedContainerVersion,
+                $"The vNext writer only emits container format {DeliveranceOptions.CurrentContainerFormatVersion}.");
         }
 
-        return ms.ToArray();
-    }
+        using var stream = new MemoryStream();
+        stream.Write("DLVR"u8);
+        WriteInt32(stream, header.ContainerVersion);
+        WriteInt64(stream, header.UtcUnixSeconds);
+        WriteString(stream, header.ApplicationId);
+        WriteString(stream, header.ApplicationVersion);
+        WriteInt32(stream, header.ApplicationSaveVersion);
+        WriteString(stream, header.BuildId);
+        WriteString(stream, header.DefinitionHash);
+        WriteString(stream, header.CadenceConfigHash);
+        stream.WriteByte(header.Flags);
+        WriteInt32(stream, directory.Count);
 
-    private static void WriteBytes(Stream s, ReadOnlySpan<byte> bytes) => s.Write(bytes);
-
-    private static void WriteInt32(Stream s, int v)
-    {
-        Span<byte> buf = stackalloc byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(buf, v);
-        s.Write(buf);
-    }
-
-    private static void WriteInt64(Stream s, long v)
-    {
-        Span<byte> buf = stackalloc byte[8];
-        BinaryPrimitives.WriteInt64LittleEndian(buf, v);
-        s.Write(buf);
-    }
-
-    private static void WriteString(Stream s, string? str)
-    {
-        if (str is null)
+        foreach (ChunkEntry entry in directory)
         {
-            WriteInt32(s, -1);
+            WriteString(stream, entry.Key);
+            WriteInt32(stream, entry.ModuleVersion);
+            stream.WriteByte((byte)entry.Criticality);
+            stream.WriteByte(entry.SerializerId);
+            stream.WriteByte(entry.CompressionId);
+            stream.WriteByte(entry.EncryptionId);
+            stream.WriteByte(entry.HashId);
+            WriteInt64(stream, entry.Offset);
+            WriteInt32(stream, entry.Length);
+            WriteBlob(stream, entry.EncryptionMetadata);
+            WriteBlob(stream, entry.HashBytes);
+        }
+        return stream.ToArray();
+    }
+
+    private static void WriteInt32(Stream stream, int value)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes, value);
+        stream.Write(bytes);
+    }
+
+    private static void WriteInt64(Stream stream, long value)
+    {
+        Span<byte> bytes = stackalloc byte[8];
+        BinaryPrimitives.WriteInt64LittleEndian(bytes, value);
+        stream.Write(bytes);
+    }
+
+    private static void WriteString(Stream stream, string? value)
+    {
+        if (value is null)
+        {
+            WriteInt32(stream, -1);
             return;
         }
+        byte[] bytes = Encoding.UTF8.GetBytes(value);
+        WriteInt32(stream, bytes.Length);
+        stream.Write(bytes);
+    }
 
-        var bytes = Encoding.UTF8.GetBytes(str);
-        WriteInt32(s, bytes.Length);
-        s.Write(bytes);
+    private static void WriteBlob(Stream stream, byte[]? value)
+    {
+        if (value is null || value.Length == 0)
+        {
+            WriteInt32(stream, 0);
+            return;
+        }
+        WriteInt32(stream, value.Length);
+        stream.Write(value);
     }
 }

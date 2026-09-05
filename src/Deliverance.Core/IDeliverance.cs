@@ -17,6 +17,13 @@ public interface IDeliverance
     Task SaveSlotAsync(string slotId, CancellationToken ct = default);
     Task LoadSlotAsync(string slotId, CancellationToken ct = default);
 
+    Task SaveAsync(string slotId, SaveRequest request, CancellationToken ct = default);
+    Task<LoadedSaveCandidate> LoadAsync(
+        string slotId,
+        IReadOnlyList<SaveModuleDefinition> definitions,
+        LoadCompatibility? compatibility = null,
+        CancellationToken ct = default);
+
     Task<IReadOnlyList<string>> ListSlotsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<SlotInfo>> ListSlotInfosAsync(CancellationToken ct = default);
     Task<SlotInfo?> GetSlotInfoAsync(string slotId, CancellationToken ct = default);

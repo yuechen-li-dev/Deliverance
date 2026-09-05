@@ -5,6 +5,9 @@ namespace Deliverance.Core.Serialization;
 
 public sealed class MessagePackSaveSerializer(MessagePackSerializerOptions? options = null) : ISaveSerializer
 {
+    public byte Id => 1;
+    public string Name => "messagepack";
+
     // MVP default: contractless resolver for convenience.
     // You can tighten this later (explicit [MessagePackObject]/[Key] DTOs) without changing Deliverance architecture.
     public MessagePackSerializerOptions Options { get; } = options ?? MessagePackSerializerOptions.Standard

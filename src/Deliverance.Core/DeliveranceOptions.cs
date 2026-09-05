@@ -1,13 +1,17 @@
 ﻿using Deliverance.Core.Codecs;
 using Deliverance.Core.Serialization;
 using Deliverance.Core.Storage;
+using Deliverance.Core.Encryption;
 
 namespace Deliverance.Core;
 
 public sealed class DeliveranceOptions
 {
     /// <summary>Format version for Deliverance container. Bump only when container structure changes.</summary>
-    public int ContainerVersion { get; set; } = 1;
+    public const int CurrentContainerFormatVersion = 2;
+
+    /// <summary>Container layout identity. Applications must not use this as a domain schema version.</summary>
+    public int ContainerVersion { get; set; } = CurrentContainerFormatVersion;
 
     public MissingChunkPolicy MissingChunkPolicy { get; set; } = MissingChunkPolicy.Warn;
 
@@ -16,6 +20,8 @@ public sealed class DeliveranceOptions
 
     public required ISaveStore Store { get; init; }
     public required ISaveSerializer Serializer { get; init; }
+
+    public ISaveSerializerRegistry Serializers { get; set; } = new DefaultSaveSerializerRegistry();
 
     /// <summary>
     /// Registry used to resolve CodecId → codec instance when reading saves.
@@ -28,10 +34,29 @@ public sealed class DeliveranceOptions
     /// </summary>
     public ICompressionCodec DefaultCompression { get; set; } = new NoCompressionCodec();
 
+    public IEncryptionCodecRegistry EncryptionCodecs { get; set; } = new DefaultEncryptionCodecRegistry();
+
+    /// <summary>Optional authenticated encryption. Null keeps saves unencrypted.</summary>
+    public IEncryptionCodec? DefaultEncryption { get; set; }
+
+    /// <summary>Keys are application/profile/slot policy and are never invented or persisted by Deliverance.</summary>
+    public IEncryptionKeyProvider? EncryptionKeyProvider { get; set; }
+
     /// <summary>Optional extra backup copies to keep when saving.</summary>
     public int BackupCopiesToKeep { get; set; } = 2;
 
     public VersionMismatchPolicy VersionMismatchPolicy { get; set; } = VersionMismatchPolicy.Error;
+
+    public DeliveranceOptions RegisterDefaults()
+    {
+        Serializers.Register(Serializer);
+        Codecs.Register(DefaultCompression);
+        if (DefaultEncryption is not null)
+        {
+            EncryptionCodecs.Register(DefaultEncryption);
+        }
+        return this;
+    }
 }
 
 public enum MissingChunkPolicy

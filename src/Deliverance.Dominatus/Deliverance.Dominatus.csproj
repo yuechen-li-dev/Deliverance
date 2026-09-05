@@ -1,13 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="MessagePack" Version="3.1.8" />
+    <ProjectReference Include="../Deliverance.Core/Deliverance.Core.csproj" />
+    <PackageReference Include="Dominatus.Core" Version="0.4.0" />
   </ItemGroup>
-
 </Project>

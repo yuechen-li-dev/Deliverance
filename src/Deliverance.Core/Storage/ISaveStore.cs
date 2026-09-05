@@ -5,7 +5,7 @@ public interface ISaveStore
     Task<bool> ExistsAsync(string slotId, CancellationToken ct = default);
     Task<IReadOnlyList<string>> ListSlotsAsync(CancellationToken ct = default);
 
-        /// <summary>Returns metadata without downloading the whole save payload (when possible).</summary>
+    /// <summary>Returns metadata without downloading the whole save payload (when possible).</summary>
     Task<SlotInfo?> GetSlotInfoAsync(string slotId, CancellationToken ct = default);
 
     /// <summary>Returns metadata for all slots (when possible).</summary>

@@ -2,6 +2,9 @@
 
 public interface ISaveSerializer
 {
+    byte Id { get; }
+    string Name { get; }
+
     byte[] Serialize<T>(T value);
     T Deserialize<T>(ReadOnlyMemory<byte> bytes);
 

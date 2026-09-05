@@ -4,6 +4,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Legacy archaeology tests intentionally exercise the obsolete mutable API. -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -18,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Deliverance.Core\Deliverance.Core.csproj" />
+    <ProjectReference Include="..\..\src\Deliverance.Dominatus\Deliverance.Dominatus.csproj" />
   </ItemGroup>
 
 	<ItemGroup>
